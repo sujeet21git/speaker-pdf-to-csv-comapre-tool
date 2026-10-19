@@ -133,6 +133,50 @@
       color: var(--accent-emerald);
     }
 
+    /* Mode Switcher Tabs */
+    .mode-switcher-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .mode-tabs {
+      display: inline-flex;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-full);
+      padding: 6px;
+      gap: 6px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .mode-tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: var(--radius-full);
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      font-family: var(--font-main);
+    }
+
+    .mode-tab:hover {
+      color: var(--text-main);
+    }
+
+    .mode-tab.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.22), rgba(139, 92, 246, 0.28));
+      border-color: var(--accent-cyan);
+      color: #ffffff;
+      box-shadow: 0 0 16px rgba(0, 242, 254, 0.3);
+    }
+
     /* Upload Zone Split Section */
     .upload-grid {
       display: grid;
@@ -796,15 +840,27 @@
     </div>
   </header>
 
-  <!-- Upload Zone: PDF Left, CSV Right -->
+  <!-- Mode Selector: PDF vs CSV or CSV vs CSV -->
+  <div class="mode-switcher-container">
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tabPdfCsv" onclick="switchMode('pdf_vs_csv')">
+        📄 PDF vs 📊 CSV Mode
+      </button>
+      <button class="mode-tab" id="tabCsvCsv" onclick="switchMode('csv_vs_csv')">
+        📊 CSV vs 📊 CSV Mode
+      </button>
+    </div>
+  </div>
+
+  <!-- Upload Zone: Dual Card Split Section -->
   <section class="upload-grid">
     
-    <!-- LEFT: PDF Upload Card -->
+    <!-- LEFT: Upload Card (PDF or CSV 1) -->
     <div class="upload-card">
       <div class="upload-header">
         <div class="upload-title">
-          <span class="upload-icon">📄</span>
-          <span>PDF Keynote Stage Briefing</span>
+          <span class="upload-icon" id="leftCardIcon">📄</span>
+          <span id="leftCardTitle">PDF Keynote Stage Briefing</span>
         </div>
         <span class="chip" id="pdfStatusBadge">Awaiting PDF</span>
       </div>
@@ -812,15 +868,15 @@
       <div class="dropzone" id="pdfDropzone">
         <input type="file" id="pdfFileInput" accept=".pdf">
         <div class="dropzone-content">
-          <div class="dropzone-icon">📥</div>
-          <div class="dropzone-text">Drag & drop PDF briefing here</div>
-          <div class="dropzone-subtext">or click to browse (.pdf format)</div>
+          <div class="dropzone-icon" id="leftDropzoneIcon">📥</div>
+          <div class="dropzone-text" id="leftDropzoneText">Drag & drop PDF briefing here</div>
+          <div class="dropzone-subtext" id="leftDropzoneSubtext">or click to browse (.pdf format)</div>
         </div>
       </div>
 
       <div class="file-status-box" id="pdfInfoBox" style="display: none;">
         <div class="file-details">
-          <span>📑</span>
+          <span id="leftFileIcon">📑</span>
           <div>
             <div class="file-name" id="pdfFileName">filename.pdf</div>
             <div class="file-meta" id="pdfFileMeta">0 KB</div>
@@ -830,12 +886,12 @@
       </div>
     </div>
 
-    <!-- RIGHT: CSV Upload Card -->
+    <!-- RIGHT: Upload Card (CSV or CSV 2) -->
     <div class="upload-card">
       <div class="upload-header">
         <div class="upload-title">
-          <span class="upload-icon">📊</span>
-          <span>CSV Speaker Contact Schedule</span>
+          <span class="upload-icon" id="rightCardIcon">📊</span>
+          <span id="rightCardTitle">CSV Speaker Contact Schedule</span>
         </div>
         <span class="chip" id="csvStatusBadge">Awaiting CSV</span>
       </div>
@@ -843,15 +899,15 @@
       <div class="dropzone" id="csvDropzone">
         <input type="file" id="csvFileInput" accept=".csv">
         <div class="dropzone-content">
-          <div class="dropzone-icon">📋</div>
-          <div class="dropzone-text">Drag & drop CSV schedule here</div>
-          <div class="dropzone-subtext">or click to browse (.csv format)</div>
+          <div class="dropzone-icon" id="rightDropzoneIcon">📋</div>
+          <div class="dropzone-text" id="rightDropzoneText">Drag & drop CSV schedule here</div>
+          <div class="dropzone-subtext" id="rightDropzoneSubtext">or click to browse (.csv format)</div>
         </div>
       </div>
 
       <div class="file-status-box" id="csvInfoBox" style="display: none;">
         <div class="file-details">
-          <span>📊</span>
+          <span id="rightFileIcon">📊</span>
           <div>
             <div class="file-name" id="csvFileName">filename.csv</div>
             <div class="file-meta" id="csvFileMeta">0 KB</div>
@@ -923,15 +979,15 @@
     </div>
 
     <div class="metric-card">
-      <div class="metric-title">🔴 Missing in PDF</div>
+      <div class="metric-title" id="metricTitleS2">🔴 Missing in PDF</div>
       <div class="metric-value color-missing-pdf" id="metricMissingPdf">0</div>
-      <div class="metric-sub">Present in CSV only</div>
+      <div class="metric-sub" id="metricSubS2">Present in Source 1 only</div>
     </div>
 
     <div class="metric-card">
-      <div class="metric-title">🔵 Missing in CSV</div>
+      <div class="metric-title" id="metricTitleS1">🔵 Missing in CSV</div>
       <div class="metric-value color-missing-csv" id="metricMissingCsv">0</div>
-      <div class="metric-sub">Present in PDF only</div>
+      <div class="metric-sub" id="metricSubS1">Present in Source 2 only</div>
     </div>
 
   </section>
@@ -974,8 +1030,8 @@
         <button class="filter-pill" data-filter="FIELD_MISMATCH" onclick="setStatusFilter('FIELD_MISMATCH', this)">🟡 Field Mismatches (<span id="pillMismatchCount">0</span>)</button>
         <button class="filter-pill" data-filter="PHONE_DIFF" onclick="setStatusFilter('PHONE_DIFF', this)">📞 Phone Differences (<span id="pillPhoneCount">0</span>)</button>
         <button class="filter-pill" data-filter="COMPANY_DIFF" onclick="setStatusFilter('COMPANY_DIFF', this)">🏢 Company Differences (<span id="pillCompCount">0</span>)</button>
-        <button class="filter-pill" data-filter="MISSING_IN_PDF" onclick="setStatusFilter('MISSING_IN_PDF', this)">🔴 Missing in PDF (<span id="pillMissingPdfCount">0</span>)</button>
-        <button class="filter-pill" data-filter="MISSING_IN_CSV" onclick="setStatusFilter('MISSING_IN_CSV', this)">🔵 Missing in CSV (<span id="pillMissingCsvCount">0</span>)</button>
+        <button class="filter-pill" data-filter="MISSING_IN_PDF" onclick="setStatusFilter('MISSING_IN_PDF', this)"><span id="pillMissingPdfLabel">🔴 Missing in PDF</span> (<span id="pillMissingPdfCount">0</span>)</button>
+        <button class="filter-pill" data-filter="MISSING_IN_CSV" onclick="setStatusFilter('MISSING_IN_CSV', this)"><span id="pillMissingCsvLabel">🔵 Missing in CSV</span> (<span id="pillMissingCsvCount">0</span>)</button>
       </div>
     </div>
 
@@ -1013,16 +1069,13 @@
     
     <div style="background: rgba(13, 21, 39, 0.9); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
       <h4 style="font-size: 0.9rem; margin-bottom: 10px; color: var(--accent-cyan);">Discrepancy Notes:</h4>
-      <ul id="modalDiscrepancies" style="padding-left: 20px; font-size: 0.85rem; color: #fda4af;"></ul>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <ul id    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
       <div>
-        <h4 style="font-size: 0.85rem; color: var(--accent-blue); margin-bottom: 8px;">CSV Schedule Record:</h4>
+        <h4 id="modalRawLeftLabel" style="font-size: 0.85rem; color: var(--accent-blue); margin-bottom: 8px;">Source 1 Record:</h4>
         <pre id="modalCsvRaw" style="background: #070c18; padding: 12px; border-radius: 8px; font-family: var(--font-mono); font-size: 0.78rem; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08);"></pre>
       </div>
       <div>
-        <h4 style="font-size: 0.85rem; color: var(--accent-purple); margin-bottom: 8px;">PDF Briefing Record:</h4>
+        <h4 id="modalRawRightLabel" style="font-size: 0.85rem; color: var(--accent-purple); margin-bottom: 8px;">Source 2 Record:</h4>
         <pre id="modalPdfRaw" style="background: #070c18; padding: 12px; border-radius: 8px; font-family: var(--font-mono); font-size: 0.78rem; overflow-x: auto; border: 1px solid rgba(255,255,255,0.08);"></pre>
       </div>
     </div>
@@ -1033,8 +1086,9 @@
   let currentResults = [];
   let currentStats = {};
   let currentFilter = 'ALL';
-  let uploadedPdfFile = null;
-  let uploadedCsvFile = null;
+  let currentMode = 'pdf_vs_csv'; // 'pdf_vs_csv' or 'csv_vs_csv'
+  let uploadedLeftFile = null;
+  let uploadedRightFile = null;
 
   // File Upload Handlers
   const pdfDropzone = document.getElementById('pdfDropzone');
@@ -1042,58 +1096,155 @@
   const csvDropzone = document.getElementById('csvDropzone');
   const csvFileInput = document.getElementById('csvFileInput');
 
+  // Mode Switcher
+  function switchMode(mode) {
+    if (currentMode === mode) return;
+    currentMode = mode;
+
+    document.getElementById('tabPdfCsv').classList.toggle('active', mode === 'pdf_vs_csv');
+    document.getElementById('tabCsvCsv').classList.toggle('active', mode === 'csv_vs_csv');
+
+    resetAll();
+
+    if (mode === 'csv_vs_csv') {
+      pdfFileInput.accept = '.csv';
+      document.getElementById('leftCardIcon').textContent = '📊';
+      document.getElementById('leftCardTitle').textContent = 'Source 1: Master / Primary CSV';
+      document.getElementById('leftDropzoneIcon').textContent = '📋';
+      document.getElementById('leftDropzoneText').textContent = 'Drag & drop Primary CSV here';
+      document.getElementById('leftDropzoneSubtext').textContent = 'or click to browse (.csv format)';
+      document.getElementById('pdfStatusBadge').textContent = 'Awaiting CSV 1';
+
+      document.getElementById('rightCardIcon').textContent = '📊';
+      document.getElementById('rightCardTitle').textContent = 'Source 2: Comparison / Updated CSV';
+      document.getElementById('rightDropzoneIcon').textContent = '📋';
+      document.getElementById('rightDropzoneText').textContent = 'Drag & drop Secondary CSV here';
+      document.getElementById('rightDropzoneSubtext').textContent = 'or click to browse (.csv format)';
+      document.getElementById('csvStatusBadge').textContent = 'Awaiting CSV 2';
+
+      document.getElementById('metricTitleS2').textContent = '🔴 Missing in CSV 2';
+      document.getElementById('metricSubS2').textContent = 'Present in CSV 1 only';
+      document.getElementById('metricTitleS1').textContent = '🔵 Missing in CSV 1';
+      document.getElementById('metricSubS1').textContent = 'Present in CSV 2 only';
+
+      document.getElementById('pillMissingPdfLabel').textContent = '🔴 Missing in CSV 2';
+      document.getElementById('pillMissingCsvLabel').textContent = '🔵 Missing in CSV 1';
+      document.getElementById('modalRawLeftLabel').textContent = 'Source 1 (CSV 1) Record:';
+      document.getElementById('modalRawRightLabel').textContent = 'Source 2 (CSV 2) Record:';
+      document.getElementById('btnLoadDefault').style.display = 'none';
+    } else {
+      pdfFileInput.accept = '.pdf';
+      document.getElementById('leftCardIcon').textContent = '📄';
+      document.getElementById('leftCardTitle').textContent = 'PDF Keynote Stage Briefing';
+      document.getElementById('leftDropzoneIcon').textContent = '📥';
+      document.getElementById('leftDropzoneText').textContent = 'Drag & drop PDF briefing here';
+      document.getElementById('leftDropzoneSubtext').textContent = 'or click to browse (.pdf format)';
+      document.getElementById('pdfStatusBadge').textContent = 'Awaiting PDF';
+
+      document.getElementById('rightCardIcon').textContent = '📊';
+      document.getElementById('rightCardTitle').textContent = 'CSV Speaker Contact Schedule';
+      document.getElementById('rightDropzoneIcon').textContent = '📋';
+      document.getElementById('rightDropzoneText').textContent = 'Drag & drop CSV schedule here';
+      document.getElementById('rightDropzoneSubtext').textContent = 'or click to browse (.csv format)';
+      document.getElementById('csvStatusBadge').textContent = 'Awaiting CSV';
+
+      document.getElementById('metricTitleS2').textContent = '🔴 Missing in PDF';
+      document.getElementById('metricSubS2').textContent = 'Present in Source 1 only';
+      document.getElementById('metricTitleS1').textContent = '🔵 Missing in CSV';
+      document.getElementById('metricSubS1').textContent = 'Present in Source 2 only';
+
+      document.getElementById('pillMissingPdfLabel').textContent = '🔴 Missing in PDF';
+      document.getElementById('pillMissingCsvLabel').textContent = '🔵 Missing in CSV';
+      document.getElementById('modalRawLeftLabel').textContent = 'CSV Schedule Record:';
+      document.getElementById('modalRawRightLabel').textContent = 'PDF Briefing Record:';
+      document.getElementById('btnLoadDefault').style.display = 'inline-flex';
+    }
+  }
+
+  // File Inputs
   pdfFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) handlePdfSelect(e.target.files[0]);
+    if (e.target.files.length) handleLeftSelect(e.target.files[0]);
   });
 
   csvFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length) handleCsvSelect(e.target.files[0]);
+    if (e.target.files.length) handleRightSelect(e.target.files[0]);
   });
 
-  function handlePdfSelect(file) {
-    uploadedPdfFile = file;
+  function handleLeftSelect(file) {
+    uploadedLeftFile = file;
     document.getElementById('pdfFileName').textContent = file.name;
     document.getElementById('pdfFileMeta').textContent = `${(file.size / 1024).toFixed(1)} KB`;
     document.getElementById('pdfInfoBox').style.display = 'flex';
-    document.getElementById('pdfStatusBadge').textContent = 'PDF Loaded';
+    const badgeText = (currentMode === 'csv_vs_csv') ? 'CSV 1 Loaded' : 'PDF Loaded';
+    document.getElementById('pdfStatusBadge').textContent = badgeText;
     document.getElementById('pdfStatusBadge').className = 'chip chip-emerald';
   }
 
-  function handleCsvSelect(file) {
-    uploadedCsvFile = file;
+  function handleRightSelect(file) {
+    uploadedRightFile = file;
     document.getElementById('csvFileName').textContent = file.name;
     document.getElementById('csvFileMeta').textContent = `${(file.size / 1024).toFixed(1)} KB`;
     document.getElementById('csvInfoBox').style.display = 'flex';
-    document.getElementById('csvStatusBadge').textContent = 'CSV Loaded';
+    const badgeText = (currentMode === 'csv_vs_csv') ? 'CSV 2 Loaded' : 'CSV Loaded';
+    document.getElementById('csvStatusBadge').textContent = badgeText;
     document.getElementById('csvStatusBadge').className = 'chip chip-emerald';
   }
 
   function clearPdfFile() {
-    uploadedPdfFile = null;
+    uploadedLeftFile = null;
     pdfFileInput.value = '';
     document.getElementById('pdfInfoBox').style.display = 'none';
-    document.getElementById('pdfStatusBadge').textContent = 'Awaiting PDF';
+    document.getElementById('pdfStatusBadge').textContent = (currentMode === 'csv_vs_csv') ? 'Awaiting CSV 1' : 'Awaiting PDF';
     document.getElementById('pdfStatusBadge').className = 'chip';
   }
 
   function clearCsvFile() {
-    uploadedCsvFile = null;
+    uploadedRightFile = null;
     csvFileInput.value = '';
     document.getElementById('csvInfoBox').style.display = 'none';
-    document.getElementById('csvStatusBadge').textContent = 'Awaiting CSV';
+    document.getElementById('csvStatusBadge').textContent = (currentMode === 'csv_vs_csv') ? 'Awaiting CSV 2' : 'Awaiting CSV';
     document.getElementById('csvStatusBadge').className = 'chip';
   }
+
+  // Drag and drop event listeners
+  [
+    { zone: pdfDropzone, handler: handleLeftSelect },
+    { zone: csvDropzone, handler: handleRightSelect }
+  ].forEach(({ zone, handler }) => {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      zone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.add('dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      zone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        zone.classList.remove('dragover');
+      });
+    });
+    zone.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files.length) {
+        handler(e.dataTransfer.files[0]);
+      }
+    });
+  });
 
   function resetAll() {
     clearPdfFile();
     clearCsvFile();
     currentResults = [];
+    currentStats = {};
     document.getElementById('metricsSection').style.display = 'none';
     document.getElementById('resultsSection').style.display = 'none';
   }
 
-  // Load Defaults
+  // Load Workspace Defaults
   async function loadDefaultFiles() {
+    if (currentMode !== 'pdf_vs_csv') switchMode('pdf_vs_csv');
+
     document.getElementById('loadingOverlay').style.display = 'block';
     try {
       const resp = await fetch('/api/default-compare');
@@ -1102,7 +1253,6 @@
         alert('Error: ' + data.error);
         return;
       }
-      // Update UI with preloaded names
       document.getElementById('pdfFileName').textContent = data.files.pdf_name;
       document.getElementById('pdfFileMeta').textContent = 'Default Project PDF (Cardiff Expo)';
       document.getElementById('pdfInfoBox').style.display = 'flex';
@@ -1126,15 +1276,24 @@
 
   // Run Custom Comparison
   async function executeComparison() {
-    if (!uploadedPdfFile && !uploadedCsvFile) {
-      // If none selected, default to workspace files
-      loadDefaultFiles();
-      return;
-    }
-
     const formData = new FormData();
-    if (uploadedPdfFile) formData.append('pdf_file', uploadedPdfFile);
-    if (uploadedCsvFile) formData.append('csv_file', uploadedCsvFile);
+    formData.append('mode', currentMode);
+
+    if (currentMode === 'csv_vs_csv') {
+      if (!uploadedLeftFile || !uploadedRightFile) {
+        alert('Please select both Source 1 (CSV 1) and Source 2 (CSV 2) files to compare.');
+        return;
+      }
+      formData.append('file1', uploadedLeftFile);
+      formData.append('file2', uploadedRightFile);
+    } else {
+      if (!uploadedLeftFile && !uploadedRightFile) {
+        loadDefaultFiles();
+        return;
+      }
+      if (uploadedLeftFile) formData.append('pdf_file', uploadedLeftFile);
+      if (uploadedRightFile) formData.append('csv_file', uploadedRightFile);
+    }
 
     document.getElementById('loadingOverlay').style.display = 'block';
     try {
@@ -1161,15 +1320,26 @@
     currentResults = data.results || [];
     currentStats = data.stats || {};
 
+    const tag1 = currentStats.source1_label || (currentMode === 'csv_vs_csv' ? 'CSV 1' : 'CSV');
+    const tag2 = currentStats.source2_label || (currentMode === 'csv_vs_csv' ? 'CSV 2' : 'PDF');
+
     // Render Metrics
     document.getElementById('metricTotal').textContent = currentResults.length;
-    document.getElementById('metricSubSources').textContent = `CSV: ${currentStats.total_csv_records} | PDF: ${currentStats.total_pdf_records}`;
+    const s1Total = currentStats.total_source1_records !== undefined ? currentStats.total_source1_records : (currentStats.total_csv_records || 0);
+    const s2Total = currentStats.total_source2_records !== undefined ? currentStats.total_source2_records : (currentStats.total_pdf_records || 0);
+    document.getElementById('metricSubSources').textContent = `${tag1}: ${s1Total} | ${tag2}: ${s2Total}`;
     document.getElementById('metricExact').textContent = currentStats.exact_matches || 0;
     document.getElementById('metricMismatches').textContent = currentStats.field_mismatches || 0;
     document.getElementById('metricPhoneDiffs').textContent = currentStats.phone_discrepancies || 0;
     document.getElementById('metricCompDiffs').textContent = currentStats.company_discrepancies || 0;
     document.getElementById('metricMissingPdf').textContent = currentStats.missing_in_pdf || 0;
     document.getElementById('metricMissingCsv').textContent = currentStats.missing_in_csv || 0;
+
+    // Render Dynamic Labels
+    document.getElementById('metricTitleS2').textContent = `🔴 Missing in ${tag2}`;
+    document.getElementById('metricTitleS1').textContent = `🔵 Missing in ${tag1}`;
+    document.getElementById('pillMissingPdfLabel').textContent = `🔴 Missing in ${tag2}`;
+    document.getElementById('pillMissingCsvLabel').textContent = `🔵 Missing in ${tag1}`;
 
     // Render Pill Counts
     document.getElementById('pillAllCount').textContent = currentResults.length;
@@ -1219,14 +1389,14 @@
       if (query) {
         const searchable = [
           r.speaker_name,
-          r.csv_speaker_name,
-          r.pdf_speaker_name,
-          r.csv_contact,
-          r.pdf_contact,
-          r.csv_company,
-          r.pdf_company,
-          r.csv_talk_title,
-          r.pdf_talk_title,
+          r.source1_speaker_name || r.csv_speaker_name,
+          r.source2_speaker_name || r.pdf_speaker_name,
+          r.source1_contact || r.csv_contact,
+          r.source2_contact || r.pdf_contact,
+          r.source1_company || r.csv_company,
+          r.source2_company || r.pdf_company,
+          r.source1_talk_title || r.csv_talk_title,
+          r.source2_talk_title || r.pdf_talk_title,
           r.section
         ].join(' ').toLowerCase();
         if (!searchable.includes(query)) return false;
@@ -1247,6 +1417,9 @@
       return;
     }
 
+    const tag1 = currentStats.source1_label || (currentMode === 'csv_vs_csv' ? 'CSV 1' : 'CSV');
+    const tag2 = currentStats.source2_label || (currentMode === 'csv_vs_csv' ? 'CSV 2' : 'PDF');
+
     records.forEach((r, idx) => {
       const tr = document.createElement('tr');
 
@@ -1255,24 +1428,33 @@
       if (r.overall_status === 'EXACT_MATCH') {
         statusBadge = '<span class="badge badge-exact">🟢 Exact Match</span>';
       } else if (r.overall_status === 'MISSING_IN_PDF') {
-        statusBadge = '<span class="badge badge-missing-pdf">🔴 Missing in PDF</span>';
+        statusBadge = `<span class="badge badge-missing-pdf">🔴 Missing in ${tag2}</span>`;
       } else if (r.overall_status === 'MISSING_IN_CSV') {
-        statusBadge = '<span class="badge badge-missing-csv">🔵 Missing in CSV</span>';
+        statusBadge = `<span class="badge badge-missing-csv">🔵 Missing in ${tag1}</span>`;
       } else {
         statusBadge = '<span class="badge badge-mismatch">🟡 Field Mismatch</span>';
       }
 
+      const s1Name = r.source1_speaker_name || r.csv_speaker_name || '';
+      const s2Name = r.source2_speaker_name || r.pdf_speaker_name || '';
+      const s1Phone = r.source1_contact || r.csv_contact || '';
+      const s2Phone = r.source2_contact || r.pdf_contact || '';
+      const s1Comp = r.source1_company || r.csv_company || '';
+      const s2Comp = r.source2_company || r.pdf_company || '';
+      const s1Title = r.source1_talk_title || r.csv_talk_title || '';
+      const s2Title = r.source2_talk_title || r.pdf_talk_title || '';
+
       // Name Compare
-      const nameDiff = (r.csv_speaker_name && r.pdf_speaker_name && r.csv_speaker_name.toLowerCase() !== r.pdf_speaker_name.toLowerCase());
+      const nameDiff = (s1Name && s2Name && s1Name.toLowerCase() !== s2Name.toLowerCase());
       const nameCell = `
         <div class="field-compare-box">
           <div class="source-val">
-            <span class="source-tag tag-csv">CSV</span>
-            <span class="${nameDiff ? 'diff-partial' : 'diff-match'}">${r.csv_speaker_name || '-'}</span>
+            <span class="source-tag tag-csv">${tag1}</span>
+            <span class="${nameDiff ? 'diff-partial' : 'diff-match'}">${s1Name || '-'}</span>
           </div>
           <div class="source-val">
-            <span class="source-tag tag-pdf">PDF</span>
-            <span class="${nameDiff ? 'diff-partial' : 'diff-match'}">${r.pdf_speaker_name || '-'}</span>
+            <span class="source-tag tag-pdf">${tag2}</span>
+            <span class="${nameDiff ? 'diff-partial' : 'diff-match'}">${s2Name || '-'}</span>
           </div>
         </div>
       `;
@@ -1285,12 +1467,12 @@
       const phoneCell = `
         <div class="field-compare-box">
           <div class="source-val">
-            <span class="source-tag tag-csv">CSV</span>
-            <span class="${!r.phone_match && r.csv_contact ? phoneClass : 'diff-match'}">${r.csv_contact || '<em style="color:#64748b">None</em>'}</span>
+            <span class="source-tag tag-csv">${tag1}</span>
+            <span class="${!r.phone_match && s1Phone ? phoneClass : 'diff-match'}">${s1Phone || '<em style="color:#64748b">None</em>'}</span>
           </div>
           <div class="source-val">
-            <span class="source-tag tag-pdf">PDF</span>
-            <span class="${!r.phone_match && r.pdf_contact ? phoneClass : 'diff-match'}">${r.pdf_contact || '<em style="color:#64748b">None</em>'}</span>
+            <span class="source-tag tag-pdf">${tag2}</span>
+            <span class="${!r.phone_match && s2Phone ? phoneClass : 'diff-match'}">${s2Phone || '<em style="color:#64748b">None</em>'}</span>
           </div>
         </div>
       `;
@@ -1305,12 +1487,12 @@
       const compCell = `
         <div class="field-compare-box">
           <div class="source-val">
-            <span class="source-tag tag-csv">CSV</span>
-            <span class="${r.comp_status !== 'EXACT_MATCH' && r.csv_company ? compClass : 'diff-match'}">${r.csv_company || '-'}</span>
+            <span class="source-tag tag-csv">${tag1}</span>
+            <span class="${r.comp_status !== 'EXACT_MATCH' && s1Comp ? compClass : 'diff-match'}">${s1Comp || '-'}</span>
           </div>
           <div class="source-val">
-            <span class="source-tag tag-pdf">PDF</span>
-            <span class="${r.comp_status !== 'EXACT_MATCH' && r.pdf_company ? compClass : 'diff-match'}">${r.pdf_company || '-'}</span>
+            <span class="source-tag tag-pdf">${tag2}</span>
+            <span class="${r.comp_status !== 'EXACT_MATCH' && s2Comp ? compClass : 'diff-match'}">${s2Comp || '-'}</span>
           </div>
         </div>
       `;
@@ -1325,15 +1507,15 @@
       const titleCell = `
         <div class="field-compare-box">
           <div class="source-val">
-            <span class="source-tag tag-csv">CSV</span>
-            <span title="${r.csv_talk_title || ''}" class="${r.title_status !== 'EXACT_MATCH' && r.csv_talk_title ? titleClass : 'diff-match'}">
-              ${(r.csv_talk_title || '-').length > 55 ? (r.csv_talk_title.substring(0, 52) + '...') : (r.csv_talk_title || '-')}
+            <span class="source-tag tag-csv">${tag1}</span>
+            <span title="${s1Title || ''}" class="${r.title_status !== 'EXACT_MATCH' && s1Title ? titleClass : 'diff-match'}">
+              ${(s1Title || '-').length > 55 ? (s1Title.substring(0, 52) + '...') : (s1Title || '-')}
             </span>
           </div>
           <div class="source-val">
-            <span class="source-tag tag-pdf">PDF</span>
-            <span title="${r.pdf_talk_title || ''}" class="${r.title_status !== 'EXACT_MATCH' && r.pdf_talk_title ? titleClass : 'diff-match'}">
-              ${(r.pdf_talk_title || '-').length > 55 ? (r.pdf_talk_title.substring(0, 52) + '...') : (r.pdf_talk_title || '-')}
+            <span class="source-tag tag-pdf">${tag2}</span>
+            <span title="${s2Title || ''}" class="${r.title_status !== 'EXACT_MATCH' && s2Title ? titleClass : 'diff-match'}">
+              ${(s2Title || '-').length > 55 ? (s2Title.substring(0, 52) + '...') : (s2Title || '-')}
             </span>
           </div>
           ${r.discrepancies && r.discrepancies.length > 0 ? `<div class="discrepancy-pill">⚠️ ${r.discrepancies[0]}</div>` : ''}
@@ -1371,8 +1553,14 @@
     const item = currentResults[index];
     if (!item) return;
 
+    const tag1 = currentStats.source1_label || (currentMode === 'csv_vs_csv' ? 'CSV 1' : 'CSV');
+    const tag2 = currentStats.source2_label || (currentMode === 'csv_vs_csv' ? 'CSV 2' : 'PDF');
+
     document.getElementById('modalTitle').textContent = item.speaker_name;
     document.getElementById('modalSub').textContent = `${item.section} | Status: ${item.overall_status}`;
+
+    document.getElementById('modalRawLeftLabel').textContent = `${tag1} Record:`;
+    document.getElementById('modalRawRightLabel').textContent = `${tag2} Record:`;
 
     const discList = document.getElementById('modalDiscrepancies');
     discList.innerHTML = '';
@@ -1389,8 +1577,8 @@
       discList.appendChild(li);
     }
 
-    document.getElementById('modalCsvRaw').textContent = JSON.stringify(item.raw_csv || { message: "Not present in CSV" }, null, 2);
-    document.getElementById('modalPdfRaw').textContent = JSON.stringify(item.raw_pdf || { message: "Not present in PDF" }, null, 2);
+    document.getElementById('modalCsvRaw').textContent = JSON.stringify(item.raw_csv || { message: `Not present in ${tag1}` }, null, 2);
+    document.getElementById('modalPdfRaw').textContent = JSON.stringify(item.raw_pdf || { message: `Not present in ${tag2}` }, null, 2);
 
     document.getElementById('detailModal').classList.add('open');
   }
@@ -1427,7 +1615,7 @@
       const resp = await fetch('/api/export-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ results: currentResults })
+        body: JSON.stringify({ results: currentResults, stats: currentStats })
       });
       const blob = await resp.blob();
       const url = window.URL.createObjectURL(blob);

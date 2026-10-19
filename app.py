@@ -8,6 +8,7 @@ Compares Speaker Name, Contact No., Company, and Talk Title.
 import os
 import io
 import re
+import csv
 import json
 import logging
 from typing import Dict, Any, List
@@ -82,15 +83,60 @@ def default_compare():
 @app.route("/api/compare", methods=["POST"])
 def compare():
     """
-    Accepts uploaded PDF and CSV files via multipart form data:
-    - pdf_file: PDF file upload
-    - csv_file: CSV file upload
+    Accepts uploaded files via multipart form data:
+    - Mode: 'pdf_vs_csv' or 'csv_vs_csv' (or auto-detected from file extensions)
+    - File inputs:
+        - file1 & file2, OR
+        - pdf_file & csv_file
     """
     try:
-        pdf_file = request.files.get("pdf_file")
-        csv_file = request.files.get("csv_file")
+        mode = request.form.get("mode", "").lower()
+        file1 = request.files.get("file1")
+        file2 = request.files.get("file2")
 
-        # Fallback to defaults if not provided in form
+        # Fallback to pdf_file / csv_file field names for backward compatibility
+        pdf_file = request.files.get("pdf_file") or (file1 if file1 and file1.filename.lower().endswith(".pdf") else None) or (file2 if file2 and file2.filename.lower().endswith(".pdf") else None)
+        csv_file = request.files.get("csv_file") or (file2 if file2 and file2.filename.lower().endswith(".csv") else None) or (file1 if file1 and file1.filename.lower().endswith(".csv") else None)
+
+        # Detect CSV-to-CSV mode:
+        # 1. Explicit mode == 'csv_vs_csv', OR
+        # 2. Both file1 and file2 are provided and end with .csv, OR
+        # 3. Two CSV files uploaded
+        is_csv_vs_csv = False
+        if mode == "csv_vs_csv":
+            is_csv_vs_csv = True
+        elif file1 and file2 and file1.filename.lower().endswith(".csv") and file2.filename.lower().endswith(".csv"):
+            is_csv_vs_csv = True
+
+        if is_csv_vs_csv:
+            csv1 = file1 or request.files.get("csv_file1") or csv_file
+            csv2 = file2 or request.files.get("csv_file2") or request.files.get("csv_file")
+
+            if not csv1 or not csv2:
+                return jsonify({"error": "Two CSV files are required for CSV-to-CSV comparison."}), 400
+
+            csv1_raw = csv1.read().decode("utf-8", errors="replace")
+            csv2_raw = csv2.read().decode("utf-8", errors="replace")
+
+            records1 = parse_csv_stream(io.StringIO(csv1_raw))
+            records2 = parse_csv_stream(io.StringIO(csv2_raw))
+
+            label1 = "CSV 1"
+            label2 = "CSV 2"
+            result = compare_datasets(records1, records2, label1=label1, label2=label2)
+            result["files"] = {
+                "mode": "csv_vs_csv",
+                "source1_name": csv1.filename,
+                "source2_name": csv2.filename,
+                "source1_label": label1,
+                "source2_label": label2,
+                "csv_name": csv1.filename,
+                "pdf_name": csv2.filename,
+                "is_default": False
+            }
+            return jsonify(result)
+
+        # PDF vs CSV comparison mode
         if not pdf_file and os.path.exists(DEFAULT_PDF_PATH):
             with open(DEFAULT_PDF_PATH, "rb") as f:
                 pdf_bytes = io.BytesIO(f.read())
@@ -99,7 +145,7 @@ def compare():
             pdf_bytes = io.BytesIO(pdf_file.read())
             pdf_name = pdf_file.filename
         else:
-            return jsonify({"error": "PDF file is required"}), 400
+            return jsonify({"error": "PDF file is required for PDF-to-CSV comparison."}), 400
 
         if not csv_file and os.path.exists(DEFAULT_CSV_PATH):
             with open(DEFAULT_CSV_PATH, "r", encoding="utf-8", errors="replace") as f:
@@ -110,17 +156,20 @@ def compare():
             csv_text = io.StringIO(csv_raw)
             csv_name = csv_file.filename
         else:
-            return jsonify({"error": "CSV file is required"}), 400
+            return jsonify({"error": "CSV file is required for PDF-to-CSV comparison."}), 400
 
-        # Parse CSV
+        # Parse CSV & PDF
         csv_records = parse_csv_stream(csv_text)
-
-        # Parse PDF
         pdf_records = parse_pdf_stream(pdf_bytes)
 
         # Compare
-        result = compare_datasets(csv_records, pdf_records)
+        result = compare_datasets(csv_records, pdf_records, label1="CSV", label2="PDF")
         result["files"] = {
+            "mode": "pdf_vs_csv",
+            "source1_name": pdf_name,
+            "source2_name": csv_name,
+            "source1_label": "PDF",
+            "source2_label": "CSV",
             "csv_name": csv_name,
             "pdf_name": pdf_name,
             "is_default": False
@@ -143,21 +192,24 @@ def export_excel():
         if not results:
             return jsonify({"error": "No data to export"}), 400
 
+        l1 = stats.get("source1_label") or (results[0].get("source1_label") if results else "Source 1")
+        l2 = stats.get("source2_label") or (results[0].get("source2_label") if results else "Source 2")
+
         # Convert to DataFrame
         export_rows = []
         for r in results:
             export_rows.append({
                 "Status": r.get("overall_status", ""),
-                "Speaker Name (CSV)": r.get("csv_speaker_name", ""),
-                "Speaker Name (PDF)": r.get("pdf_speaker_name", ""),
-                "Contact No. (CSV)": r.get("csv_contact", ""),
-                "Contact No. (PDF)": r.get("pdf_contact", ""),
+                f"Speaker Name ({l1})": r.get("source1_speaker_name") or r.get("csv_speaker_name", ""),
+                f"Speaker Name ({l2})": r.get("source2_speaker_name") or r.get("pdf_speaker_name", ""),
+                f"Contact No. ({l1})": r.get("source1_contact") or r.get("csv_contact", ""),
+                f"Contact No. ({l2})": r.get("source2_contact") or r.get("pdf_contact", ""),
                 "Contact Status": r.get("phone_status", ""),
-                "Company (CSV)": r.get("csv_company", ""),
-                "Company (PDF)": r.get("pdf_company", ""),
+                f"Company ({l1})": r.get("source1_company") or r.get("csv_company", ""),
+                f"Company ({l2})": r.get("source2_company") or r.get("pdf_company", ""),
                 "Company Status": r.get("comp_status", ""),
-                "Talk Title (CSV)": r.get("csv_talk_title", ""),
-                "Talk Title (PDF)": r.get("pdf_talk_title", ""),
+                f"Talk Title ({l1})": r.get("source1_talk_title") or r.get("csv_talk_title", ""),
+                f"Talk Title ({l2})": r.get("source2_talk_title") or r.get("pdf_talk_title", ""),
                 "Title Status": r.get("title_status", ""),
                 "Stage/Section": r.get("section", ""),
                 "Role": r.get("role", ""),
@@ -171,8 +223,8 @@ def export_excel():
         df_exact = df_all[df_all["Status"] == "EXACT_MATCH"]
         df_mismatches = df_all[df_all["Status"].isin(["FIELD_MISMATCH", "PARTIAL_MATCH"])]
         df_phone_diffs = df_all[df_all["Contact Status"].isin(["MISMATCH", "MISSING_IN_CSV", "MISSING_IN_PDF"])]
-        df_missing_pdf = df_all[df_all["Status"] == "MISSING_IN_PDF"]
-        df_missing_csv = df_all[df_all["Status"] == "MISSING_IN_CSV"]
+        df_missing_s2 = df_all[df_all["Status"] == "MISSING_IN_PDF"]
+        df_missing_s1 = df_all[df_all["Status"] == "MISSING_IN_CSV"]
 
         # Stats DataFrame
         stats_df = pd.DataFrame(list(stats.items()), columns=["Metric", "Value"])
@@ -186,10 +238,10 @@ def export_excel():
                 df_mismatches.to_excel(writer, sheet_name="Field Mismatches", index=False)
             if not df_phone_diffs.empty:
                 df_phone_diffs.to_excel(writer, sheet_name="Phone Discrepancies", index=False)
-            if not df_missing_pdf.empty:
-                df_missing_pdf.to_excel(writer, sheet_name="Missing in PDF", index=False)
-            if not df_missing_csv.empty:
-                df_missing_csv.to_excel(writer, sheet_name="Missing in CSV", index=False)
+            if not df_missing_s2.empty:
+                df_missing_s2.to_excel(writer, sheet_name=f"Missing in {l2}"[:31], index=False)
+            if not df_missing_s1.empty:
+                df_missing_s1.to_excel(writer, sheet_name=f"Missing in {l1}"[:31], index=False)
 
         excel_buffer.seek(0)
         return send_file(
@@ -209,24 +261,28 @@ def export_csv():
     try:
         data = request.json or {}
         results = data.get("results", [])
+        stats = data.get("stats", {})
 
         if not results:
             return jsonify({"error": "No data to export"}), 400
+
+        l1 = stats.get("source1_label") or (results[0].get("source1_label") if results else "Source 1")
+        l2 = stats.get("source2_label") or (results[0].get("source2_label") if results else "Source 2")
 
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
             "Overall Status",
-            "Speaker Name (CSV)",
-            "Speaker Name (PDF)",
-            "Contact No. (CSV)",
-            "Contact No. (PDF)",
+            f"Speaker Name ({l1})",
+            f"Speaker Name ({l2})",
+            f"Contact No. ({l1})",
+            f"Contact No. ({l2})",
             "Contact Status",
-            "Company (CSV)",
-            "Company (PDF)",
+            f"Company ({l1})",
+            f"Company ({l2})",
             "Company Status",
-            "Talk Title (CSV)",
-            "Talk Title (PDF)",
+            f"Talk Title ({l1})",
+            f"Talk Title ({l2})",
             "Title Status",
             "Stage/Section",
             "Role",
@@ -237,16 +293,16 @@ def export_csv():
         for r in results:
             writer.writerow([
                 r.get("overall_status", ""),
-                r.get("csv_speaker_name", ""),
-                r.get("pdf_speaker_name", ""),
-                r.get("csv_contact", ""),
-                r.get("pdf_contact", ""),
+                r.get("source1_speaker_name") or r.get("csv_speaker_name", ""),
+                r.get("source2_speaker_name") or r.get("pdf_speaker_name", ""),
+                r.get("source1_contact") or r.get("csv_contact", ""),
+                r.get("source2_contact") or r.get("pdf_contact", ""),
                 r.get("phone_status", ""),
-                r.get("csv_company", ""),
-                r.get("pdf_company", ""),
+                r.get("source1_company") or r.get("csv_company", ""),
+                r.get("source2_company") or r.get("pdf_company", ""),
                 r.get("comp_status", ""),
-                r.get("csv_talk_title", ""),
-                r.get("pdf_talk_title", ""),
+                r.get("source1_talk_title") or r.get("csv_talk_title", ""),
+                r.get("source2_talk_title") or r.get("pdf_talk_title", ""),
                 r.get("title_status", ""),
                 r.get("section", ""),
                 r.get("role", ""),

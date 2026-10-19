@@ -78,11 +78,155 @@ def normalize_title(title: Optional[str]) -> str:
     return t
 
 
+def parse_generic_tabular_csv(reader: List[List[str]]) -> List[Dict[str, Any]]:
+    """
+    Parses generic flat tabular CSV files with auto-detected column headers
+    (e.g., Name, Phone/Contact, Company/Business, Talk Title, Stage, Time).
+    """
+    records = []
+    if not reader:
+        return records
+
+    header_idx = -1
+    col_map = {}
+
+    for idx, row in enumerate(reader[:15]):
+        matches = 0
+        temp_map = {}
+        for c_idx, cell in enumerate(row):
+            val = cell.strip().lower()
+            if not val:
+                continue
+            if re.search(r"\b(speaker[\s_]?name|full[\s_]?name|speaker|presenter)\b", val) or val == "name":
+                temp_map["name"] = c_idx
+                matches += 1
+            elif re.search(r"\b(first[\s_]?name)\b", val):
+                temp_map["first_name"] = c_idx
+                matches += 1
+            elif re.search(r"\b(last[\s_]?name|surname)\b", val):
+                temp_map["last_name"] = c_idx
+                matches += 1
+            elif re.search(r"\b(contact|phone|mobile|tel|telephone|cell|whatsapp)\b", val):
+                temp_map["contact"] = c_idx
+                matches += 1
+            elif re.search(r"\b(company|business|organization|organisation|firm|agency)\b", val):
+                temp_map["company"] = c_idx
+                matches += 1
+            elif re.search(r"\b(session[\s_]?title|talk[\s_]?title|talk|title|topic|presentation|subject)\b", val):
+                temp_map["title"] = c_idx
+                matches += 1
+            elif re.search(r"\b(designation|role|job[\s_]?title|position)\b", val):
+                temp_map["designation"] = c_idx
+                matches += 1
+            elif re.search(r"\b(start[\s_]?time|time|slot|schedule)\b", val):
+                temp_map["time"] = c_idx
+            elif re.search(r"\b(end[\s_]?time)\b", val):
+                temp_map["end_time"] = c_idx
+            elif re.search(r"\b(stage|section|track|room|hall)\b", val):
+                temp_map["section"] = c_idx
+
+        if ("name" in temp_map or ("first_name" in temp_map and "last_name" in temp_map)) and matches >= 2:
+            header_idx = idx
+            col_map = temp_map
+            break
+
+    if header_idx != -1:
+        for r_idx in range(header_idx + 1, len(reader)):
+            row = reader[r_idx]
+            if not any(c.strip() for c in row):
+                continue
+
+            if "name" in col_map and col_map["name"] < len(row):
+                name = row[col_map["name"]].strip()
+            elif "first_name" in col_map and "last_name" in col_map:
+                fn = row[col_map["first_name"]].strip() if col_map["first_name"] < len(row) else ""
+                ln = row[col_map["last_name"]].strip() if col_map["last_name"] < len(row) else ""
+                name = f"{fn} {ln}".strip()
+            else:
+                name = ""
+
+            if not name or name.lower() in ("speaker name", "name", "total"):
+                continue
+
+            contact = row[col_map["contact"]].strip() if "contact" in col_map and col_map["contact"] < len(row) else ""
+            company = row[col_map["company"]].strip() if "company" in col_map and col_map["company"] < len(row) else ""
+            title = row[col_map["title"]].strip() if "title" in col_map and col_map["title"] < len(row) else ""
+            desig = row[col_map["designation"]].strip() if "designation" in col_map and col_map["designation"] < len(row) else ""
+            section = row[col_map["section"]].strip() if "section" in col_map and col_map["section"] < len(row) else "General Stage"
+
+            time_val = ""
+            if "time" in col_map and col_map["time"] < len(row):
+                t1 = row[col_map["time"]].strip()
+                t2 = row[col_map["end_time"]].strip() if "end_time" in col_map and col_map["end_time"] < len(row) else ""
+                time_val = f"{t1} - {t2}".strip(" -") if t2 else t1
+
+            records.append({
+                "source": "CSV",
+                "section": section,
+                "role": desig or "Speaker",
+                "time": time_val,
+                "name": name,
+                "company": company,
+                "designation": desig,
+                "contact": contact,
+                "talk_title": title,
+                "row_index": r_idx + 1
+            })
+    else:
+        for r_idx, row in enumerate(reader):
+            non_empty = [c.strip() for c in row if c.strip()]
+            if not non_empty or len(non_empty) < 2:
+                continue
+            phone = ""
+            name = ""
+            comp = ""
+            title = ""
+            for cell in non_empty:
+                digits = re.sub(r"\D", "", cell)
+                if len(digits) >= 9 and not phone:
+                    phone = cell
+                elif not name and not re.search(r"^\d", cell) and len(cell.split()) in (2, 3, 4):
+                    name = cell
+                elif not comp and not re.search(r"^\d", cell):
+                    comp = cell
+                elif not title and len(cell) > 10:
+                    title = cell
+            if name:
+                records.append({
+                    "source": "CSV",
+                    "section": "General Stage",
+                    "role": "Speaker",
+                    "time": "",
+                    "name": name,
+                    "company": comp,
+                    "designation": "",
+                    "contact": phone,
+                    "talk_title": title,
+                    "row_index": r_idx + 1
+                })
+
+    return records
+
+
 def parse_csv_stream(file_stream: io.TextIOBase) -> List[Dict[str, Any]]:
     """
-    Parses speaker CSV file stream (supports multiple sections: Keynotes, Seminars, Panels, Interviews).
+    Parses speaker CSV file stream (supports both multi-section Cardiff Expo schedules
+    and standard tabular CSVs with header detection).
     """
     reader = list(csv.reader(file_stream))
+    if not reader:
+        return []
+
+    full_sample = " ".join([" ".join(row) for row in reader[:35]])
+    is_multi_section = any(k in full_sample for k in [
+        "Keynote Stage", "Seminar Stage", "Panel Document", "Spotlight Panel", "Business Interview Schedule"
+    ])
+
+    if not is_multi_section:
+        records = parse_generic_tabular_csv(reader)
+        if records:
+            return records
+
     records = []
     current_section = "Keynote Stage"
     current_panel = None
@@ -402,7 +546,12 @@ def calculate_similarity(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 
-def compare_single_pair(csv_item: Dict[str, Any], pdf_item: Dict[str, Any]) -> Dict[str, Any]:
+def compare_single_pair(
+    csv_item: Dict[str, Any],
+    pdf_item: Dict[str, Any],
+    label1: str = "CSV",
+    label2: str = "PDF"
+) -> Dict[str, Any]:
     """
     Compares four required dimensions:
     1. Speaker Name
@@ -497,30 +646,29 @@ def compare_single_pair(csv_item: Dict[str, Any], pdf_item: Dict[str, Any]) -> D
 
     # Overall Match Determination
     all_exact = name_match and (phone_status == "EXACT_MATCH") and (comp_status == "EXACT_MATCH") and (title_status == "EXACT_MATCH")
-    all_acceptable = name_match and phone_match and comp_match and title_match
 
     discrepancies = []
     if norm_csv_name != norm_pdf_name:
-        discrepancies.append(f"Name spelling variation: '{csv_name}' vs '{pdf_name}'")
+        discrepancies.append(f"Name spelling variation: {label1} '{csv_name}' vs {label2} '{pdf_name}'")
     if not phone_match:
         if phone_status == "MISMATCH":
-            discrepancies.append(f"Contact No. differs: CSV '{csv_phone}' vs PDF '{pdf_phone}'")
+            discrepancies.append(f"Contact No. differs: {label1} '{csv_phone}' vs {label2} '{pdf_phone}'")
         elif phone_status == "MISSING_IN_CSV":
-            discrepancies.append(f"Contact No. missing in CSV (PDF has '{pdf_phone}')")
+            discrepancies.append(f"Contact No. missing in {label1} ({label2} has '{pdf_phone}')")
         elif phone_status == "MISSING_IN_PDF":
-            discrepancies.append(f"Contact No. missing in PDF (CSV has '{csv_phone}')")
+            discrepancies.append(f"Contact No. missing in {label2} ({label1} has '{csv_phone}')")
     if not comp_match or comp_status == "PARTIAL_MATCH":
         if comp_status == "PARTIAL_MATCH":
-            discrepancies.append(f"Company typo/minor diff: CSV '{csv_comp}' vs PDF '{pdf_comp}'")
+            discrepancies.append(f"Company typo/minor diff: {label1} '{csv_comp}' vs {label2} '{pdf_comp}'")
         elif comp_status == "MISMATCH":
-            discrepancies.append(f"Company differs: CSV '{csv_comp}' vs PDF '{pdf_comp}'")
+            discrepancies.append(f"Company differs: {label1} '{csv_comp}' vs {label2} '{pdf_comp}'")
     if not title_match:
         if title_status == "MISSING_IN_PDF":
-            discrepancies.append(f"Talk Title missing in PDF (CSV has '{csv_title[:35]}...')")
+            discrepancies.append(f"Talk Title missing in {label2} ({label1} has '{csv_title[:35]}...')")
         elif title_status == "MISSING_IN_CSV":
-            discrepancies.append(f"Talk Title missing in CSV (PDF has '{pdf_title[:35]}...')")
+            discrepancies.append(f"Talk Title missing in {label1} ({label2} has '{pdf_title[:35]}...')")
         elif title_status == "MISMATCH":
-            discrepancies.append(f"Talk Title differs: CSV '{csv_title[:35]}...' vs PDF '{pdf_title[:35]}...'")
+            discrepancies.append(f"Talk Title differs: {label1} '{csv_title[:35]}...' vs {label2} '{pdf_title[:35]}...'")
 
     if all_exact:
         overall_status = "EXACT_MATCH"
@@ -531,24 +679,35 @@ def compare_single_pair(csv_item: Dict[str, Any], pdf_item: Dict[str, Any]) -> D
 
     return {
         "speaker_name": csv_name or pdf_name,
+        "source1_speaker_name": csv_name,
+        "source2_speaker_name": pdf_name,
         "csv_speaker_name": csv_name,
         "pdf_speaker_name": pdf_name,
         "name_match": name_match,
 
+        "source1_contact": csv_phone,
+        "source2_contact": pdf_phone,
         "csv_contact": csv_phone,
         "pdf_contact": pdf_phone,
         "phone_status": phone_status,
         "phone_match": phone_match,
 
+        "source1_company": csv_comp,
+        "source2_company": pdf_comp,
         "csv_company": csv_comp,
         "pdf_company": pdf_comp,
         "comp_status": comp_status,
         "comp_match": comp_match,
 
+        "source1_talk_title": csv_title,
+        "source2_talk_title": pdf_title,
         "csv_talk_title": csv_title,
         "pdf_talk_title": pdf_title,
         "title_status": title_status,
         "title_match": title_match,
+
+        "source1_label": label1,
+        "source2_label": label2,
 
         "section": csv_item.get("section") or pdf_item.get("section", ""),
         "role": csv_item.get("role") or pdf_item.get("role", ""),
@@ -560,20 +719,25 @@ def compare_single_pair(csv_item: Dict[str, Any], pdf_item: Dict[str, Any]) -> D
     }
 
 
-def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compare_datasets(
+    csv_records: List[Dict[str, Any]],
+    pdf_records: List[Dict[str, Any]],
+    label1: str = "CSV",
+    label2: str = "PDF"
+) -> Dict[str, Any]:
     """
-    Performs full cross-comparison between all CSV and PDF records.
+    Performs full cross-comparison between two datasets (PDF vs CSV or CSV vs CSV).
     Produces:
     - matched_records
-    - missing_in_pdf
-    - missing_in_csv
+    - missing_in_pdf (missing in dataset 2)
+    - missing_in_csv (missing in dataset 1)
     - summary_stats
     """
     matched_pairs = []
     unmatched_pdf = list(pdf_records)
     unmatched_csv = []
 
-    # First pass: Match by normalized name AND section/role (e.g. Panel 1 Tracy Ho vs Panel 3 Tracy Ho)
+    # First pass: Match by normalized name AND section/role
     used_pdf_indices = set()
 
     for c_idx, c_item in enumerate(csv_records):
@@ -597,9 +761,9 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
             if name_sim >= 0.85:
                 # Calculate bonus score for matching section or role
                 score = name_sim * 10
-                if c_sec == p_sec:
+                if c_sec and p_sec and c_sec == p_sec:
                     score += 5
-                if c_role == p_role:
+                if c_role and p_role and c_role == p_role:
                     score += 3
                 if score > best_score:
                     best_score = score
@@ -608,30 +772,38 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
         if best_match_idx is not None and best_score >= 8.5:
             used_pdf_indices.add(best_match_idx)
             p_item = pdf_records[best_match_idx]
-            pair_result = compare_single_pair(c_item, p_item)
+            pair_result = compare_single_pair(c_item, p_item, label1=label1, label2=label2)
             matched_pairs.append(pair_result)
         else:
             unmatched_csv.append(c_item)
 
-    # Remaining PDF items
+    # Remaining items in dataset 2
     remaining_pdf = [p for i, p in enumerate(pdf_records) if i not in used_pdf_indices]
 
-    # Format missing_in_pdf
+    # Format missing in dataset 2 (missing_in_pdf)
     missing_in_pdf_records = []
     for c in unmatched_csv:
         missing_in_pdf_records.append({
             "speaker_name": c.get("name", ""),
+            "source1_speaker_name": c.get("name", ""),
+            "source2_speaker_name": "-",
             "csv_speaker_name": c.get("name", ""),
             "pdf_speaker_name": "-",
             "name_match": False,
+            "source1_contact": c.get("contact", ""),
+            "source2_contact": "-",
             "csv_contact": c.get("contact", ""),
             "pdf_contact": "-",
             "phone_status": "MISSING_IN_PDF",
             "phone_match": False,
+            "source1_company": c.get("company", ""),
+            "source2_company": "-",
             "csv_company": c.get("company", ""),
             "pdf_company": "-",
             "comp_status": "MISSING_IN_PDF",
             "comp_match": False,
+            "source1_talk_title": c.get("talk_title", ""),
+            "source2_talk_title": "-",
             "csv_talk_title": c.get("talk_title", ""),
             "pdf_talk_title": "-",
             "title_status": "MISSING_IN_PDF",
@@ -640,27 +812,37 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
             "role": c.get("role", ""),
             "time": c.get("time", ""),
             "overall_status": "MISSING_IN_PDF",
-            "discrepancies": [f"Speaker present in CSV ({c.get('section')}), but absent from PDF briefing document."],
+            "source1_label": label1,
+            "source2_label": label2,
+            "discrepancies": [f"Speaker present in {label1} ({c.get('section', 'List')}), but absent from {label2}."],
             "raw_csv": c,
             "raw_pdf": None
         })
 
-    # Format missing_in_csv
+    # Format missing in dataset 1 (missing_in_csv)
     missing_in_csv_records = []
     for p in remaining_pdf:
         missing_in_csv_records.append({
             "speaker_name": p.get("name", ""),
+            "source1_speaker_name": "-",
+            "source2_speaker_name": p.get("name", ""),
             "csv_speaker_name": "-",
             "pdf_speaker_name": p.get("name", ""),
             "name_match": False,
+            "source1_contact": "-",
+            "source2_contact": p.get("contact", ""),
             "csv_contact": "-",
             "pdf_contact": p.get("contact", ""),
             "phone_status": "MISSING_IN_CSV",
             "phone_match": False,
+            "source1_company": "-",
+            "source2_company": p.get("company", ""),
             "csv_company": "-",
             "pdf_company": p.get("company", ""),
             "comp_status": "MISSING_IN_CSV",
             "comp_match": False,
+            "source1_talk_title": "-",
+            "source2_talk_title": p.get("talk_title", ""),
             "csv_talk_title": "-",
             "pdf_talk_title": p.get("talk_title", ""),
             "title_status": "MISSING_IN_CSV",
@@ -669,7 +851,9 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
             "role": p.get("role", ""),
             "time": p.get("time", ""),
             "overall_status": "MISSING_IN_CSV",
-            "discrepancies": [f"Speaker present in PDF ({p.get('section')}), but absent from CSV schedule."],
+            "source1_label": label1,
+            "source2_label": label2,
+            "discrepancies": [f"Speaker present in {label2} ({p.get('section', 'List')}), but absent from {label1}."],
             "raw_csv": None,
             "raw_pdf": p
         })
@@ -685,6 +869,10 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
     title_diffs = sum(1 for r in matched_pairs if not r["title_match"] or r["title_status"] == "PARTIAL_MATCH")
 
     stats = {
+        "source1_label": label1,
+        "source2_label": label2,
+        "total_source1_records": len(csv_records),
+        "total_source2_records": len(pdf_records),
         "total_csv_records": len(csv_records),
         "total_pdf_records": len(pdf_records),
         "total_matched_speakers": len(matched_pairs),
@@ -695,6 +883,8 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
         "title_discrepancies": title_diffs,
         "missing_in_pdf": len(missing_in_pdf_records),
         "missing_in_csv": len(missing_in_csv_records),
+        "missing_in_source2": len(missing_in_pdf_records),
+        "missing_in_source1": len(missing_in_csv_records),
         "match_accuracy_pct": round((exact_matches / len(matched_pairs) * 100), 1) if matched_pairs else 0
     }
 
@@ -703,5 +893,7 @@ def compare_datasets(csv_records: List[Dict[str, Any]], pdf_records: List[Dict[s
         "results": all_results,
         "matched_pairs": matched_pairs,
         "missing_in_pdf": missing_in_pdf_records,
-        "missing_in_csv": missing_in_csv_records
+        "missing_in_csv": missing_in_csv_records,
+        "source1_label": label1,
+        "source2_label": label2
     }
